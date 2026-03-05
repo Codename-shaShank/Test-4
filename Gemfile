@@ -71,7 +71,8 @@ group :test do
   # Use system testing [https://guides.rubyonrails.org/testing.html#system-testing]
   gem "capybara"
   gem "selenium-webdriver"
-
+  # Pin minitest to 5.x; minitest 6.x is incompatible with activesupport 7.0 on Ruby 3.2
+  gem "minitest", "~> 5.1"
 end
 
 gem "chartkick", "~> 5.0"
