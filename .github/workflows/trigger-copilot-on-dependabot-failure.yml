@@ -335,3 +335,71 @@ jobs:
             --method POST \
             --input - <<< '{"labels":["copilot-ci-fix-requested"]}'
 
+      # ── Step 8: Auto-approve pending Copilot workflows ────────
+      - name: Auto-approve pending workflows on Copilot PRs
+        if: >-
+          steps.find_pr.outputs.skip != 'true' &&
+          steps.check_limit.outputs.exceeded != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT_FOR_COPILOT }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          # Only approve runs triggered by trusted bots for the specific CI
+          # workflow.  This prevents the PAT from bypassing GitHub's
+          # "Approve and run" gate for untrusted actors or unexpected workflows.
+          TRUSTED_ACTORS='["dependabot[bot]","github-copilot[bot]"]'
+          TRUSTED_WORKFLOWS='["Tests"]'
+
+          PENDING_RUNS=$(gh api "repos/${REPO}/actions/runs?status=action_required" \
+            --jq --arg sha "${HEAD_SHA}" \
+                 --argjson actors "${TRUSTED_ACTORS}" \
+                 --argjson workflows "${TRUSTED_WORKFLOWS}" \
+          DEPENDABOT_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RETRY_LABEL: ${{ env.RETRY_LABEL }}
+        run: |
+          set -euo pipefail
+
+          echo "🔎 Looking for Copilot PRs targeting Dependabot branch '${DEPENDABOT_BRANCH}' with label '${RETRY_LABEL}'..."
+
+          COPILOT_SHAS=$(gh api "repos/${REPO}/pulls?state=open&base=${DEPENDABOT_BRANCH}" \
+            --jq --arg label "${RETRY_LABEL}" \
+              '[.[] | select(any(.labels[]?; .name == $label)) | .head.sha] | unique | .[]' || true)
+
+          if [[ -z "${COPILOT_SHAS:-}" ]]; then
+            echo "ℹ️  No open Copilot PRs found for Dependabot branch '${DEPENDABOT_BRANCH}'. Nothing to approve."
+            exit 0
+          fi
+
+          ALL_PENDING_RUNS=()
+
+          # Collect pending workflow run IDs for each Copilot PR head SHA
+          while IFS= read -r COPILOT_SHA; do
+            [[ -z "${COPILOT_SHA}" ]] && continue
+            echo "🔎 Finding pending workflow runs for Copilot PR head SHA ${COPILOT_SHA}..."
+            PENDING_FOR_SHA=$(gh api "repos/${REPO}/actions/runs?status=action_required" \
+              --jq --arg sha "${COPILOT_SHA}" \
+                '[.workflow_runs[] | select(.head_sha == $sha) | .id] | .[]' || true)
+
+            if [[ -n "${PENDING_FOR_SHA:-}" ]]; then
+              while IFS= read -r RID; do
+                [[ -z "${RID}" ]] && continue
+                ALL_PENDING_RUNS+=("${RID}")
+              done <<< "${PENDING_FOR_SHA}"
+            fi
+          done <<< "${COPILOT_SHAS}"
+
+          if [[ ${#ALL_PENDING_RUNS[@]} -eq 0 ]]; then
+            echo "ℹ️  No pending workflow runs to approve for Copilot PRs."
+            exit 0
+          fi
+
+          # Deduplicate run IDs before approving
+          mapfile -t UNIQUE_RUNS < <(printf '%s\n' "${ALL_PENDING_RUNS[@]}" | sort -u)
+
+          for RUN_ID in "${UNIQUE_RUNS[@]}"; do
+            echo "✅ Approving workflow run ${RUN_ID}"
+            gh api "repos/${REPO}/actions/runs/${RUN_ID}/approve" --method POST || true
+          done
