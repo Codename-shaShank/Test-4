@@ -347,9 +347,23 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Only approve runs triggered by trusted bots for the specific CI
+          # workflow.  This prevents the PAT from bypassing GitHub's
+          # "Approve and run" gate for untrusted actors or unexpected workflows.
+          TRUSTED_ACTORS='["dependabot[bot]","github-copilot[bot]"]'
+          TRUSTED_WORKFLOWS='["Tests"]'
+
           PENDING_RUNS=$(gh api "repos/${REPO}/actions/runs?status=action_required" \
             --jq --arg sha "${HEAD_SHA}" \
-              '[.workflow_runs[] | select(.head_sha == $sha) | .id] | .[]')
+                 --argjson actors "${TRUSTED_ACTORS}" \
+                 --argjson workflows "${TRUSTED_WORKFLOWS}" \
+              '[.workflow_runs[]
+                | select(
+                    .head_sha == $sha and
+                    (.actor.login | IN($actors[])) and
+                    (.name | IN($workflows[]))
+                  )
+                | .id] | .[]')
 
           if [[ -z "${PENDING_RUNS:-}" ]]; then
             echo "ℹ️  No pending workflow runs to approve."
