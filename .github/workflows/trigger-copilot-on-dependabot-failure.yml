@@ -340,23 +340,6 @@ jobs:
         if: >-
           steps.find_pr.outputs.skip != 'true' &&
           steps.check_limit.outputs.exceeded != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT_FOR_COPILOT }}
-          REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-
-          PENDING_RUNS=$(gh api "repos/${REPO}/actions/runs?status=action_required" \
-            --jq --arg sha "${HEAD_SHA}" \
-              '[.workflow_runs[] | select(.head_sha == $sha) | .id] | .[]')
-
-          if [[ -z "${PENDING_RUNS:-}" ]]; then
-            echo "ℹ️  No pending workflow runs to approve."
-            exit 0
-          fi
-
-          while IFS= read -r RUN_ID; do
-            echo "✅ Approving workflow run ${RUN_ID}"
-            gh api "repos/${REPO}/actions/runs/${RUN_ID}/approve" --method POST || true
-          done <<< "${PENDING_RUNS}"
+          echo "ℹ️  Auto-approval of workflow runs has been disabled for security reasons."       
