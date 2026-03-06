@@ -1,5 +1,6 @@
 require_relative "boot"
 
+require "logger" # Required for Ruby 3.2+ compatibility with Rails 7.0
 require "rails/all"
 
 # Require the gems listed in Gemfile, including any gems
