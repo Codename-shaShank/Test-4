@@ -335,11 +335,3 @@ jobs:
             --method POST \
             --input - <<< '{"labels":["copilot-ci-fix-requested"]}'
 
-      # ── Step 8: Auto-approve pending Copilot workflows ────────
-      - name: Auto-approve pending workflows on Copilot PRs
-        if: >-
-          steps.find_pr.outputs.skip != 'true' &&
-          steps.check_limit.outputs.exceeded != 'true'
-        run: |
-          set -euo pipefail
-          echo "ℹ️  Auto-approval of workflow runs has been disabled for security reasons."       
