@@ -30,6 +30,9 @@ gem "tailwindcss-rails"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
 
+# Pin minitest to 5.x: minitest 6.x is incompatible with activesupport 7.0
+gem "minitest", "~> 5.1"
+
 # Use Redis adapter to run Action Cable in production
 gem "redis", "~> 4.0"
 
